@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        #arButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background-color: white;
+            border-radius: 4px;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+            z-index: 100;
+            display: none; /* Will show when AR is available */
+        }
+        #resetButton {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            padding: 12px 24px;
+            background-color: white;
+            border-radius: 4px;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+            z-index: 100;
+        }
+    </style>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <button id="arButton">View in AR</button>
+    <button id="resetButton">Reset Model</button>
+
+    <script>
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+        let originalPositions = new Map();
+
+        const createScene = async function() {
+            const scene = new BABYLON.Scene(engine);
+            
+            // Add camera
+            const camera = new BABYLON.ArcRotateCamera("camera", 0, Math.PI / 3, 10, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true);
+            
+            // Add lighting
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            
+            // Load your 3D model (replace with your model path)
+            const result = await BABYLON.SceneLoader.ImportMeshAsync("", "/", "mandoline.gltf", scene);
+            const model = result.meshes[0];
+            
+            // Store original positions of all parts
+            result.meshes.forEach(mesh => {
+                originalPositions.set(mesh.name, {
+                    position: mesh.position.clone(),
+                    rotation: mesh.rotation.clone()
+                });
+            });
+
+            // Enable physics
+            scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.AmmoJSPlugin());
+
+            // Make parts interactive
+            result.meshes.forEach(mesh => {
+                if (mesh.name !== "root") {
+                    mesh.checkCollisions = true;
+                    mesh.physicsImpostor = new BABYLON.PhysicsImpostor(
+                        mesh,
+                        BABYLON.PhysicsImpostor.BoxImpostor,
+                        { mass: 1, restitution: 0.5, friction: 0.1 },
+                        scene
+                    );
+
+                    // Make parts draggable
+                    mesh.actionManager = new BABYLON.ActionManager(scene);
+                    let startingPosition;
+                    let isDragging = false;
+
+                    mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            BABYLON.ActionManager.OnPickDownTrigger,
+                            function(evt) {
+                                isDragging = true;
+                                startingPosition = mesh.position.clone();
+                            }
+                        )
+                    );
+
+                    scene.onPointerMove = function(evt) {
+                        if (isDragging) {
+                            const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+                            if (pickResult.hit) {
+                                mesh.position = pickResult.pickedPoint;
+                            }
+                        }
+                    };
+
+                    scene.onPointerUp = function() {
+                        isDragging = false;
+                    };
+                }
+            });
+
+            // AR setup
+            const xr = await scene.createDefaultXRExperienceAsync({
+                uiOptions: {
+                    sessionMode: "immersive-ar",
+                    referenceSpaceType: "local-floor"
+                }
+            });
+
+            if (xr.baseExperience) {
+                document.getElementById("arButton").style.display = "block";
+                document.getElementById("arButton").onclick = () => {
+                    xr.baseExperience.enterXRAsync("immersive-ar", "unbounded", xr.renderTarget);
+                };
+            }
+
+            // Reset functionality
+            document.getElementById("resetButton").onclick = () => {
+                originalPositions.forEach((data, meshName) => {
+                    const mesh = scene.getMeshByName(meshName);
+                    if (mesh) {
+                        mesh.position = data.position.clone();
+                        mesh.rotation = data.rotation.clone();
+                        if (mesh.physicsImpostor) {
+                            mesh.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
+                            mesh.physicsImpostor.setAngularVelocity(BABYLON.Vector3.Zero());
+                        }
+                    }
+                });
+            };
+
+            return scene;
+        };
+
+        createScene().then(scene => {
+            engine.runRenderLoop(() => {
+                scene.render();
+            });
+        });
+
+        window.addEventListener("resize", () => {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
