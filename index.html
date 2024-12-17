@@ -17,14 +17,26 @@
             height: 100%;
             touch-action: none;
         }
+        #loadingText {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 20px;
+            z-index: 100;
+        }
     </style>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 </head>
 <body>
+    <div id="loadingText">Loading 3D models...</div>
     <canvas id="renderCanvas"></canvas>
     <script>
         const canvas = document.getElementById("renderCanvas");
+        const loadingText = document.getElementById("loadingText");
         const engine = new BABYLON.Engine(canvas, true);
 
         const createScene = async function() {
@@ -37,69 +49,78 @@
             // Add light
             const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-            // Load the GLB models
-            const body = await BABYLON.SceneLoader.ImportMeshAsync(
-                "", 
-                "https://github.com/kool-ltd/ar-babylon/blob/main/", 
-                "mandoline-body.glb",
-                scene
-            );
+            // Add ground for visibility during testing
+            const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
+            const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
+            groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+            ground.material = groundMaterial;
 
-            const handguard = await BABYLON.SceneLoader.ImportMeshAsync(
-                "", 
-                "https://github.com/kool-ltd/ar-babylon/blob/main/", 
-                "mandoline-handguard.glb",
-                scene
-            );
-
-            // Position the models
-            body.meshes[0].position = new BABYLON.Vector3(0, 0, 0);
-            handguard.meshes[0].position = new BABYLON.Vector3(0.5, 0, 0);
-
-            // Scale the models if needed
-            const modelScale = 0.1;
-            body.meshes[0].scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
-            handguard.meshes[0].scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
-
-            // Enable XR
             try {
-                const xr = await scene.createDefaultXRExperienceAsync({
-                    uiOptions: {
-                        sessionMode: 'immersive-ar'
-                    }
-                });
+                // Add a default cube to make sure the scene is working
+                const defaultCube = BABYLON.MeshBuilder.CreateBox("defaultCube", {size: 0.3}, scene);
+                defaultCube.position.y = 0.5;
 
-                if (xr.baseExperience) {
-                    // Position both models in front of the user when AR starts
-                    const originPosition = new BABYLON.Vector3(0, 0, -1);
-                    body.meshes[0].position.addInPlace(originPosition);
-                    handguard.meshes[0].position.addInPlace(originPosition);
+                // Log for debugging
+                console.log("Scene created with default cube");
 
-                    // Enable drag behavior for both models
-                    const pointerDragBehavior = new BABYLON.PointerDragBehavior({
-                        dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
+                // Load the GLB models
+                // Replace these URLs with the correct raw URLs to your GLB files
+                const bodyUrl = "YOUR_RAW_URL_TO_MANDOLINE_BODY.glb";
+                const handguardUrl = "YOUR_RAW_URL_TO_MANDOLINE_HANDGUARD.glb";
+
+                try {
+                    const [bodyResult, handguardResult] = await Promise.all([
+                        BABYLON.SceneLoader.ImportMeshAsync("", "", bodyUrl, scene),
+                        BABYLON.SceneLoader.ImportMeshAsync("", "", handguardUrl, scene)
+                    ]);
+
+                    // Remove default cube once models are loaded
+                    defaultCube.dispose();
+
+                    const bodyMesh = bodyResult.meshes[0];
+                    const handguardMesh = handguardResult.meshes[0];
+
+                    // Position and scale the models
+                    bodyMesh.position = new BABYLON.Vector3(-0.5, 0.5, 0);
+                    handguardMesh.position = new BABYLON.Vector3(0.5, 0.5, 0);
+
+                    const modelScale = 0.1;
+                    bodyMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
+                    handguardMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
+
+                    // Add drag behavior
+                    [bodyMesh, handguardMesh].forEach(mesh => {
+                        const dragBehavior = new BABYLON.PointerDragBehavior({
+                            dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
+                        });
+                        mesh.addBehavior(dragBehavior);
                     });
-                    
-                    body.meshes[0].addBehavior(pointerDragBehavior);
-                    
-                    const pointerDragBehavior2 = new BABYLON.PointerDragBehavior({
-                        dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
-                    });
-                    
-                    handguard.meshes[0].addBehavior(pointerDragBehavior2);
 
-                    // Add highlighting on selection
-                    const highlightLayer = new BABYLON.HighlightLayer("highlightLayer", scene);
-                    
-                    scene.onPointerDown = function(evt, pickResult) {
-                        if (pickResult.hit) {
-                            highlightLayer.removeAllMeshes();
-                            highlightLayer.addMesh(pickResult.pickedMesh, BABYLON.Color3.Green());
+                    // Hide loading text
+                    loadingText.style.display = "none";
+
+                    // Enable XR
+                    const xr = await scene.createDefaultXRExperienceAsync({
+                        uiOptions: {
+                            sessionMode: 'immersive-ar'
                         }
-                    };
+                    });
+
+                    if (xr.baseExperience) {
+                        console.log("XR experience created");
+                        // Position models in front of user in AR
+                        bodyMesh.position.z = -1;
+                        handguardMesh.position.z = -1;
+                    }
+
+                } catch (modelError) {
+                    console.error("Error loading models:", modelError);
+                    loadingText.textContent = "Error loading 3D models";
                 }
+
             } catch (error) {
-                console.log("AR not supported", error);
+                console.error("Error in scene creation:", error);
+                loadingText.textContent = "Error creating scene";
             }
 
             return scene;
@@ -109,9 +130,11 @@
             engine.runRenderLoop(function() {
                 scene.render();
             });
+        }).catch(error => {
+            console.error("Error in main execution:", error);
+            loadingText.textContent = "Error initializing scene";
         });
 
-        // Handle window resize
         window.addEventListener("resize", function() {
             engine.resize();
         });
