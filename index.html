@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Babylon.js AR Scene</title>
+    <title>Mandoline AR Experience</title>
     <style>
         html, body {
             width: 100%;
@@ -31,38 +31,35 @@
             const scene = new BABYLON.Scene(engine);
 
             // Add camera
-            const camera = new BABYLON.ArcRotateCamera("camera", 0, Math.PI / 3, 10, BABYLON.Vector3.Zero(), scene);
+            const camera = new BABYLON.ArcRotateCamera("camera", 0, Math.PI / 3, 2, BABYLON.Vector3.Zero(), scene);
             camera.attachControl(canvas, true);
 
             // Add light
             const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-            // Create two meshes
-            const box = BABYLON.MeshBuilder.CreateBox("box", {
-                size: 1
-            }, scene);
-            box.position.x = -1;
+            // Load the GLB models
+            const body = await BABYLON.SceneLoader.ImportMeshAsync(
+                "", 
+                "https://github.com/kool-ltd/ar-babylon/blob/main/", 
+                "mandoline-body.glb",
+                scene
+            );
 
-            const sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {
-                diameter: 1
-            }, scene);
-            sphere.position.x = 1;
+            const handguard = await BABYLON.SceneLoader.ImportMeshAsync(
+                "", 
+                "https://github.com/kool-ltd/ar-babylon/blob/main/", 
+                "mandoline-handguard.glb",
+                scene
+            );
 
-            // Create a TransformNode as container
-            const container = new BABYLON.TransformNode("container", scene);
+            // Position the models
+            body.meshes[0].position = new BABYLON.Vector3(0, 0, 0);
+            handguard.meshes[0].position = new BABYLON.Vector3(0.5, 0, 0);
 
-            // Parent both meshes to the container
-            box.parent = container;
-            sphere.parent = container;
-
-            // Add some material to distinguish the objects
-            const boxMaterial = new BABYLON.StandardMaterial("boxMat", scene);
-            boxMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0); // Red
-            box.material = boxMaterial;
-
-            const sphereMaterial = new BABYLON.StandardMaterial("sphereMat", scene);
-            sphereMaterial.diffuseColor = new BABYLON.Color3(0, 0, 1); // Blue
-            sphere.material = sphereMaterial;
+            // Scale the models if needed
+            const modelScale = 0.1;
+            body.meshes[0].scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
+            handguard.meshes[0].scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
 
             // Enable XR
             try {
@@ -72,32 +69,38 @@
                     }
                 });
 
-                // Optional: Add features for when AR is supported
                 if (xr.baseExperience) {
-                    // Set initial position of the container in AR space
-                    container.position = new BABYLON.Vector3(0, 0, -1);
-                    
-                    // Handle AR session started
-                    xr.baseExperience.onStateChangedObservable.add((state) => {
-                        if (state === BABYLON.WebXRState.IN_XR) {
-                            console.log("AR session started");
-                        }
+                    // Position both models in front of the user when AR starts
+                    const originPosition = new BABYLON.Vector3(0, 0, -1);
+                    body.meshes[0].position.addInPlace(originPosition);
+                    handguard.meshes[0].position.addInPlace(originPosition);
+
+                    // Enable drag behavior for both models
+                    const pointerDragBehavior = new BABYLON.PointerDragBehavior({
+                        dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
                     });
+                    
+                    body.meshes[0].addBehavior(pointerDragBehavior);
+                    
+                    const pointerDragBehavior2 = new BABYLON.PointerDragBehavior({
+                        dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
+                    });
+                    
+                    handguard.meshes[0].addBehavior(pointerDragBehavior2);
+
+                    // Add highlighting on selection
+                    const highlightLayer = new BABYLON.HighlightLayer("highlightLayer", scene);
+                    
+                    scene.onPointerDown = function(evt, pickResult) {
+                        if (pickResult.hit) {
+                            highlightLayer.removeAllMeshes();
+                            highlightLayer.addMesh(pickResult.pickedMesh, BABYLON.Color3.Green());
+                        }
+                    };
                 }
             } catch (error) {
                 console.log("AR not supported", error);
             }
-
-            // Add interaction handling
-            scene.onPointerDown = function(evt, pickResult) {
-                if (pickResult.hit) {
-                    const picked = pickResult.pickedMesh;
-                    // Rotate the entire container when clicking any object
-                    if (picked === box || picked === sphere) {
-                        container.rotate(new BABYLON.Vector3(0, 1, 0), 0.2);
-                    }
-                }
-            };
 
             return scene;
         };
