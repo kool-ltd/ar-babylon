@@ -49,19 +49,10 @@
             // Add light
             const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-            // Add ground for visibility during testing
-            const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
-            const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
-            groundMaterial.diffuseColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-            ground.material = groundMaterial;
-
             try {
                 // Add a default cube to make sure the scene is working
                 const defaultCube = BABYLON.MeshBuilder.CreateBox("defaultCube", {size: 0.3}, scene);
-                defaultCube.position = new BABYLON.Vector3(0, 0.15, -1); // Position cube in front
-
-                // Log for debugging
-                console.log("Scene created with default cube");
+                defaultCube.position = new BABYLON.Vector3(0, 0, -1.5); // Position further in front
 
                 // Load the GLB models
                 const bodyUrl = "/ar-babylon/mandoline-body.glb";
@@ -79,15 +70,25 @@
                     const bodyMesh = bodyResult.meshes[0];
                     const handguardMesh = handguardResult.meshes[0];
 
-                    const modelScale = 0.1;
+                    // Set a fixed scale for real-world size (adjust these values based on actual dimensions)
+                    // Assuming the model's units are in meters
+                    const modelScale = 1; // This should be calculated based on your actual model size
                     bodyMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
                     handguardMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
 
-                    // Position the models in front of the camera
-                    bodyMesh.position = new BABYLON.Vector3(-0.2, 0.15, -1);
-                    handguardMesh.position = new BABYLON.Vector3(0.2, 0.15, -1);
+                    // Create a transform node to hold both models
+                    const modelsRoot = new BABYLON.TransformNode("modelsRoot", scene);
+                    bodyMesh.parent = modelsRoot;
+                    handguardMesh.parent = modelsRoot;
 
-                    // Add drag behavior
+                    // Position the models in front of the camera
+                    modelsRoot.position = new BABYLON.Vector3(0, -0.5, -1.5); // Positioned lower and further away
+
+                    // Position models relative to the root
+                    bodyMesh.position = new BABYLON.Vector3(-0.2, 0, 0);
+                    handguardMesh.position = new BABYLON.Vector3(0.2, 0, 0);
+
+                    // Add drag behavior for horizontal movement only
                     [bodyMesh, handguardMesh].forEach(mesh => {
                         const dragBehavior = new BABYLON.PointerDragBehavior({
                             dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
@@ -111,19 +112,13 @@
                         // Adjust position when entering AR
                         xr.baseExperience.onStateChangedObservable.add((state) => {
                             if (state === BABYLON.WebXRState.IN_XR) {
-                                // Create a transform node to hold both models
-                                const modelsRoot = new BABYLON.TransformNode("modelsRoot", scene);
-                                bodyMesh.parent = modelsRoot;
-                                handguardMesh.parent = modelsRoot;
-                                
-                                // Position the transform node in front of the user
-                                modelsRoot.position = new BABYLON.Vector3(0, 0, -1);
-                                
-                                // Adjust individual model positions relative to the transform node
-                                bodyMesh.position = new BABYLON.Vector3(-0.2, 0.15, 0);
-                                handguardMesh.position = new BABYLON.Vector3(0.2, 0.15, 0);
+                                // Position models relative to the camera in AR
+                                modelsRoot.position = new BABYLON.Vector3(0, -0.5, -1.5);
                             }
                         });
+
+                        // Disable scaling in AR
+                        xr.baseExperience.camera.position = new BABYLON.Vector3(0, 1.6, 0); // Set camera at average human height
                     }
 
                 } catch (modelError) {
