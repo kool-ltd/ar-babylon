@@ -58,13 +58,12 @@
             try {
                 // Add a default cube to make sure the scene is working
                 const defaultCube = BABYLON.MeshBuilder.CreateBox("defaultCube", {size: 0.3}, scene);
-                defaultCube.position.y = 0.5;
+                defaultCube.position = new BABYLON.Vector3(0, 0.15, -1); // Position cube in front
 
                 // Log for debugging
                 console.log("Scene created with default cube");
 
                 // Load the GLB models
-                // Replace these URLs with the correct raw URLs to your GLB files
                 const bodyUrl = "/ar-babylon/mandoline-body.glb";
                 const handguardUrl = "/ar-babylon/mandoline-handguard.glb";
 
@@ -80,13 +79,13 @@
                     const bodyMesh = bodyResult.meshes[0];
                     const handguardMesh = handguardResult.meshes[0];
 
-                    // Position and scale the models
-                    bodyMesh.position = new BABYLON.Vector3(-0.5, 0.5, 0);
-                    handguardMesh.position = new BABYLON.Vector3(0.5, 0.5, 0);
-
                     const modelScale = 0.1;
                     bodyMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
                     handguardMesh.scaling = new BABYLON.Vector3(modelScale, modelScale, modelScale);
+
+                    // Position the models in front of the camera
+                    bodyMesh.position = new BABYLON.Vector3(-0.2, 0.15, -1);
+                    handguardMesh.position = new BABYLON.Vector3(0.2, 0.15, -1);
 
                     // Add drag behavior
                     [bodyMesh, handguardMesh].forEach(mesh => {
@@ -108,9 +107,23 @@
 
                     if (xr.baseExperience) {
                         console.log("XR experience created");
-                        // Position models in front of user in AR
-                        bodyMesh.position.z = -1;
-                        handguardMesh.position.z = -1;
+                        
+                        // Adjust position when entering AR
+                        xr.baseExperience.onStateChangedObservable.add((state) => {
+                            if (state === BABYLON.WebXRState.IN_XR) {
+                                // Create a transform node to hold both models
+                                const modelsRoot = new BABYLON.TransformNode("modelsRoot", scene);
+                                bodyMesh.parent = modelsRoot;
+                                handguardMesh.parent = modelsRoot;
+                                
+                                // Position the transform node in front of the user
+                                modelsRoot.position = new BABYLON.Vector3(0, 0, -1);
+                                
+                                // Adjust individual model positions relative to the transform node
+                                bodyMesh.position = new BABYLON.Vector3(-0.2, 0.15, 0);
+                                handguardMesh.position = new BABYLON.Vector3(0.2, 0.15, 0);
+                            }
+                        });
                     }
 
                 } catch (modelError) {
